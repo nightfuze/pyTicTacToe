@@ -1,6 +1,10 @@
+import hashlib
+import json
+import os
+import time
 import tkinter as tk
 from enum import Enum
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 
 class ModeState(Enum):
@@ -9,7 +13,7 @@ class ModeState(Enum):
 
 
 class TicTacToe:
-    def __init__(self, size=15, mode: ModeState = ModeState.computer):
+    def __init__(self, size=10, mode: ModeState = ModeState.computer):
         self.size = size
         self.board = [[0] * size for _ in range(size)]
         self.current_player = 1
@@ -17,6 +21,14 @@ class TicTacToe:
         self.directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
         self.mode = mode
         self.game_over = False
+        self.moves = 0
+
+    def is_moves_left(self) -> bool:
+        """Проверка, на оставшиеся ходы"""
+        for row in self.board:
+            if row.count(0):
+                return False
+        return True
 
     def make_move(self, row, col) -> bool:
         """Сделать ход."""
@@ -25,6 +37,7 @@ class TicTacToe:
         if self.board[row][col] == 0:
             self.board[row][col] = self.current_player
             self.current_player = -self.current_player
+            self.moves += 1
             if self.mode == ModeState.computer and self.current_player == -1:
                 self.make_computer_move()
             if self.check_winner(1) or self.check_winner(-1):
@@ -46,23 +59,23 @@ class TicTacToe:
         scores = {
             # 4 фигуры в ряд
             4: {
-                1: 50 if not current_player else 100000000,     # Один открытый конец
+                1: 50 if not current_player else 100000000,  # Один открытый конец
                 2: 500000 if not current_player else 100000000  # Два открытых конца
             },
             # 3 фигуры в ряд
             3: {
-                1: 5 if not current_player else 7,           # Один открытый конец
-                2: 50 if not current_player else 10000       # Два открытых конца
+                1: 5 if not current_player else 7,  # Один открытый конец
+                2: 50 if not current_player else 10000  # Два открытых конца
             },
             # 2 фигуры в ряд
             2: {
-                1: 2,   # Один открытый конец
-                2: 5    # Два открытых конца
+                1: 2,  # Один открытый конец
+                2: 5  # Два открытых конца
             },
             # 1 фигура в ряд
             1: {
                 1: 0.5,  # Один открытый конец
-                2: 1     # Два открытых конца
+                2: 1  # Два открытых конца
             }
         }
 
@@ -74,9 +87,9 @@ class TicTacToe:
 
     def analyze_direction(self, row, col, direction, player):
         """Анализирует линию в заданном направлении для подсчета очков."""
-        consecutive = 0     # Счетчик последовательных фигур
-        open_ends = 0       # Счетчик открытых концов
-        score = 0           # Оценка линии
+        consecutive = 0  # Счетчик последовательных фигур
+        open_ends = 0  # Счетчик открытых концов
+        score = 0  # Оценка линии
 
         # Проверка открытого конца сзади
         prev_row = row - direction[0]
@@ -107,24 +120,41 @@ class TicTacToe:
     def evaluate_position(self):
         """Оценка всех позиций."""
         score = 0
+        checked_lines = set()
 
         for row in range(self.size):
             for col in range(self.size):
                 if self.board[row][col] != 0:
                     player = self.board[row][col]
                     for direction in self.directions:
-                        score += self.analyze_direction(row, col, direction, player) * player
+                        line_key = (row, col, direction[0], direction[1])
+                        if line_key not in checked_lines:
+                            checked_lines.add(line_key)
+                            score += self.analyze_direction(row, col, direction, player) * player
 
         return score
 
     def get_valid_moves(self):
-        """Получает список возможных ходов, приоритизируя ходы рядом с существующими фигурами."""
-        valid_moves = []
+        """Получает список возможных ходов с приоритизацией и исключением бесполезных ходов"""
+        moves = []
         for row in range(self.size):
             for col in range(self.size):
-                if self.board[row][col] == 0 and self.has_neighbor(row, col):
-                    valid_moves.append((row, col))
-        return valid_moves if valid_moves else [(self.size // 2, self.size // 2)]
+                if self.board[row][col] == 0:
+                    priority = 0
+                    # Проверяем соседние клетки в радиусе 2
+                    for dr in range(-2, 3):
+                        for dc in range(-2, 3):
+                            r, c = row + dr, col + dc
+                            if 0 <= r < self.size and 0 <= c < self.size:
+                                if self.board[r][c] != 0:
+                                    # Ближайшие соседи имеют больший вес
+                                    priority += 3 if abs(dr) <= 1 and abs(dc) <= 1 else 1
+
+                    if priority > 0:
+                        moves.append((priority, row, col))
+
+        moves.sort(reverse=True)
+        return [(row, col) for _, row, col in moves] if moves else [(self.size // 2, self.size // 2)]
 
     def has_neighbor(self, row, col):
         """Проверка, есть ли рядом фигура."""
@@ -139,7 +169,7 @@ class TicTacToe:
                     return True
         return False
 
-    def minimax(self, depth, alpha, beta, maximizing_player):
+    def minimax(self, depth, alpha=float('-inf'), beta=float('inf'), maximizing_player=False):
         """Минимакс алгоритм для выбора наилучшего хода."""
         if depth == 0:
             return self.evaluate_position(), None
@@ -181,7 +211,7 @@ class TicTacToe:
 
     def get_best_move(self):
         """Вычисление лучшего хода для компьютера."""
-        _, move = self.minimax(2, float('-inf'), float('inf'), True)
+        _, move = self.minimax(2)
         return move
 
     def check_winner(self, player):
@@ -204,40 +234,311 @@ class TicTacToe:
         return False
 
 
+class AuthService:
+    def __init__(self):
+        self.users_file = "users.json"
+        self.users = {}
+        self.load_users()
+
+    def login(self, username, password):
+        if username not in self.users:
+            return False, "Неверное имя пользователя"
+
+        if AuthService.verify_password(password, self.users[username]):
+            return True, "Успешный вход"
+
+        return False, "Неверный пароль"
+
+    def register(self, username, password, confirm_password):
+        if username in self.users:
+            return False, "Такое имя пользователя уже зарегистрировано"
+
+        if password != confirm_password:
+            return False, "Пароли не совпадают"
+
+        self.users[username] = AuthService.hash_password(password)
+        self.save_users()
+
+        return True, "Успешная регистрация"
+
+    @staticmethod
+    def hash_password(password):
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    @staticmethod
+    def verify_password(password, hashed_password):
+        return AuthService.hash_password(password) == hashed_password
+
+    def save_users(self):
+        with open(self.users_file, "w") as f:
+            json.dump(self.users, f)
+
+    def load_users(self):
+        if os.path.exists(self.users_file):
+            with open(self.users_file, "r") as f:
+                self.users = json.load(f)
+
+
+class AuthWindow(tk.Toplevel):
+    def __init__(self, root):
+        super().__init__(root)
+        self.root = root
+        self.resizable(False, False)
+        self.grab_set()
+        self.focus_set()
+        self.transient(root)
+
+        self.auth_service = AuthService()
+
+        self.main_frame = tk.Frame(self)
+        self.main_frame.pack(expand=True, fill='both', padx=20, pady=20)
+
+        self.fields = {}
+
+    def create_field(self, label, field):
+        frame = tk.Frame(self.main_frame)
+        frame.pack(fill=tk.X, pady=10)
+
+        label = tk.Label(frame, text=label)
+        label.pack(anchor=tk.W)
+
+        entry = tk.Entry(frame)
+        entry.pack(fill=tk.X, expand=True)
+
+        error_label = tk.Label(frame, text="", fg="red")
+        error_label.pack(anchor=tk.W)
+
+        self.fields[field] = (entry, error_label)
+
+    def get_field(self, field):
+        return self.fields[field][0].get()
+
+    def hide_input(self, field):
+        self.fields[field][0].config(show="*")
+
+    def show_input(self, field):
+        self.fields[field][0].config(show="")
+
+    def show_error(self, field, message):
+        self.fields[field][1].config(text=message)
+
+    def clear_error(self, field):
+        self.fields[field][1].config(text="")
+
+
+class LoginWindow(AuthWindow):
+    def __init__(self, root, on_success=None):
+        super().__init__(root)
+        self.title("Авторизация")
+        self.geometry("300x300")
+
+        self.create_field("Имя пользователя:", "username")
+        self.create_field("Пароль:", "password")
+        self.hide_input("password")
+        self.on_success = on_success
+
+        show_password_var = tk.BooleanVar()
+        show_password_checkbox = tk.Checkbutton(
+            self.main_frame,
+            text="Показать пароль",
+            variable=show_password_var,
+            command=lambda: self.toggle_password_visibility(show_password_var.get())
+        )
+        show_password_checkbox.pack(anchor=tk.W, pady=10)
+
+        buttons_frame = tk.Frame(self.main_frame)
+        buttons_frame.pack(pady=20)
+
+        self.login_button = tk.Button(buttons_frame, text="Войти", command=self.login)
+        self.login_button.pack(side=tk.LEFT, padx=5)
+
+        self.register_button = tk.Button(buttons_frame, text="Регистрация",
+                                         command=self.show_register)
+        self.register_button.pack(side=tk.LEFT, padx=5)
+
+    def toggle_password_visibility(self, show_password):
+        if show_password:
+            self.show_input("password")
+        else:
+            self.hide_input("password")
+
+    def login(self):
+        username = self.get_field("username")
+        password = self.get_field("password")
+
+        self.clear_error("username")
+        self.clear_error("password")
+
+        if not username:
+            self.show_error("username", "Введите имя пользователя")
+            return
+        if not password:
+            self.show_error("password", "Введите пароль")
+            return
+
+        success, message = self.auth_service.login(username, password)
+        if success:
+            if self.on_success:
+                self.on_success(username)
+            self.destroy()
+        else:
+            if "пользователя" in message:
+                self.show_error("username", message)
+            else:
+                self.show_error("password", message)
+
+    def show_register(self):
+        self.destroy()
+        RegisterWindow(self.root, self.on_success)
+
+
+class RegisterWindow(AuthWindow):
+    def __init__(self, root, on_success=None):
+        super().__init__(root)
+        self.title("Регистрация")
+        self.geometry("300x400")
+        self.on_success = on_success
+
+        self.create_field("Имя пользователя:", "username")
+        self.create_field("Пароль:", "password")
+        self.create_field("Подтвердите пароль:", "confirm_password")
+
+        self.hide_input("password")
+        self.hide_input("confirm_password")
+
+        show_password_var = tk.BooleanVar()
+        show_password_checkbox = tk.Checkbutton(
+            self.main_frame,
+            text="Показать пароль",
+            variable=show_password_var,
+            command=lambda: self.toggle_password_visibility(show_password_var.get())
+        )
+        show_password_checkbox.pack(anchor=tk.W, pady=10)
+
+        buttons_frame = tk.Frame(self.main_frame)
+        buttons_frame.pack(pady=20)
+
+        self.register_button = tk.Button(buttons_frame, text="Зарегистрироваться", command=self.register_user)
+        self.register_button.pack(padx=5)
+
+        self.back_button = tk.Button(buttons_frame, text="Назад", command=self.back_to_login)
+        self.back_button.pack(padx=5)
+
+    def toggle_password_visibility(self, show_password):
+        if show_password:
+            self.show_input("password")
+            self.show_input("confirm_password")
+        else:
+            self.hide_input("password")
+            self.hide_input("confirm_password")
+
+    def register_user(self):
+        username = self.get_field("username")
+        password = self.get_field("password")
+        confirm_password = self.get_field("confirm_password")
+
+        for field in self.fields:
+            self.clear_error(field)
+
+        if not username:
+            self.show_error("username", "Введите имя пользователя")
+            return
+        if len(username) < 3:
+            self.show_error("username", "Имя пользователя должно быть не менее 3 символов")
+            return
+
+        if not password:
+            self.show_error("password", "Введите пароль")
+            return
+        if len(password) < 6:
+            self.show_error("password", "Пароль должен быть не менее 6 символов")
+            return
+
+        if not confirm_password:
+            self.show_error("confirm_password", "Подтвердите пароль")
+            return
+
+        success, message = self.auth_service.register(username, password, confirm_password)
+        if success:
+            messagebox.showinfo("Успех", message)
+            self.back_to_login()
+        else:
+            if "пользователя" in message:
+                self.show_error("username", message)
+            elif "Пароли" in message:
+                self.show_error("confirm_password", message)
+            else:
+                self.show_error("password", message)
+
+    def back_to_login(self):
+        self.destroy()
+        LoginWindow(self.root, self.on_success)
+
+
 class TicTacToeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Крестики-Нолики до 5 в ряд")
 
         self.game = TicTacToe()
-        self.cell_size = 40
+        self.cell_size = 65
         self.game_mode = ModeState.computer
+        self.start_time = None
+        self.timer_id = None
+
+        self.sidebar_frame = tk.Frame(self.root, width=200)
+        self.sidebar_frame.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar_frame.pack_propagate(False)
 
         self.main_frame = tk.Frame(self.root, padx=10, pady=10)
         self.main_frame.pack(expand=True, fill=tk.BOTH)
 
-        self.control_frame = tk.Frame(self.main_frame)
-        self.control_frame.grid(row=0, column=0, columnspan=2, pady=(0, 10))
+        settings_frame = tk.LabelFrame(self.sidebar_frame, text="Настройки игры", padx=10, pady=5)
+        settings_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.mode_label = tk.Label(settings_frame, text="Режим игры:")
+        self.mode_label.pack(anchor=tk.W, pady=(5, 0))
 
         self.mode_var = tk.StringVar(value=ModeState.computer.value)
-        self.mode_label = tk.Label(self.control_frame, text="Режим игры:")
-        self.mode_label.grid(row=0, column=0, padx=(0, 10))
-
         self.mode_menu = ttk.OptionMenu(
-            self.control_frame,
+            settings_frame,
             self.mode_var,
             ModeState.computer.value,
             *[mode.value for mode in ModeState],
             command=self.change_mode
         )
-        self.mode_menu.grid(row=0, column=1)
+        self.mode_menu.pack(fill=tk.X, pady=(0, 10))
 
-        self.reset_button = tk.Button(self.control_frame, text="Новая игра", command=self.reset_game)
-        self.reset_button.grid(row=0, column=2, padx=(20, 0))
+        control_frame = tk.LabelFrame(self.sidebar_frame, text="Управление", padx=10, pady=5)
+        control_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.status_var = tk.StringVar(value="X - ход")
-        self.status_label = tk.Label(self.control_frame, textvariable=self.status_var)
-        self.status_label.grid(row=0, column=3, padx=(20, 0))
+        self.reset_button = tk.Button(control_frame, text="Новая игра", command=self.reset_game)
+        self.reset_button.pack(fill=tk.X, pady=5)
+
+        stats_frame = tk.LabelFrame(self.sidebar_frame, text="Статистика", padx=10, pady=5)
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.status_var = tk.StringVar(value="Ход: X")
+        self.status_label = tk.Label(stats_frame, textvariable=self.status_var)
+        self.status_label.pack(anchor=tk.W, pady=5)
+
+        self.moves_var = tk.StringVar(value="Ходов: 0")
+        self.moves_label = tk.Label(stats_frame, textvariable=self.moves_var)
+        self.moves_label.pack(anchor=tk.W, pady=5)
+
+        self.time_var = tk.StringVar(value="Время: 00:00")
+        self.time_label = tk.Label(stats_frame, textvariable=self.time_var)
+        self.time_label.pack(anchor=tk.W, pady=5)
+
+        player_frame = tk.LabelFrame(self.sidebar_frame, text="Игрок", padx=10, pady=5)
+        player_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.player_name_var = tk.StringVar(value="Гость")
+        self.player_label = tk.Label(player_frame, textvariable=self.player_name_var)
+        self.player_label.pack(anchor=tk.W, pady=5)
+
+        self.logout_button = tk.Button(player_frame, text="Выйти", command=self.logout)
+        self.logout_button.pack(fill=tk.X, pady=5)
 
         canvas_size = self.cell_size * self.game.size
         self.canvas = tk.Canvas(
@@ -246,10 +547,12 @@ class TicTacToeApp:
             height=canvas_size,
             bg="white"
         )
-        self.canvas.grid(row=1, column=0)
+        self.canvas.pack()
         self.canvas.bind("<Button-1>", self.on_click)
 
         self.draw_board()
+
+        LoginWindow(self.root, self.on_login)
 
     def draw_board(self):
         """Отрисовка игрового поля."""
@@ -312,13 +615,18 @@ class TicTacToeApp:
         """Обработчик нажатия на игровое поле."""
         row, col = event.y // self.cell_size, event.x // self.cell_size
         if self.game.make_move(row, col):
+            self.moves_var.set(f"Ходов: {self.game.moves}")
             self.draw_board()
             if self.game.check_winner(1):
-                x, y = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
-                self.canvas.create_text(x, y, text="Крестики победили!", font="Arial 32")
+                # x, y = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
+                # self.canvas.create_text(x, y, text="Крестики победили!", font="Arial 32")
+                messagebox.showinfo("Победа!", "Крестики победили!")
             elif self.game.check_winner(-1):
-                x, y = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
-                self.canvas.create_text(x, y, text="Нолики победили!", font="Arial 32")
+                # x, y = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
+                # self.canvas.create_text(x, y, text="Нолики победили!", font="Arial 32")
+                messagebox.showinfo("Поражение!", "Нолики победили!")
+            elif self.game.is_moves_left():
+                messagebox.showinfo("Ничья!", "Ничья!")
 
     def change_mode(self, event):
         """Обработчик изменения режима игры."""
@@ -335,7 +643,24 @@ class TicTacToeApp:
         """Сброс игры."""
         self.game = TicTacToe(mode=self.game_mode)
         self.draw_board()
+        self.moves_var.set(f"Ходов: {self.game.moves}")
+        self.time_var.set(f"Время: 00:00")
         self.status_var.set("X - ход")
+        self.start_time = time.time()
+        self.update_timer()
+
+    def update_timer(self):
+        """Обновление таймера."""
+        if self.start_time is None:
+            self.start_time = time.time()
+
+        elapsed = int(time.time() - self.start_time)
+        minutes = elapsed // 60
+        seconds = elapsed % 60
+        self.time_var.set(f"Время: {minutes:02d}:{seconds:02d}")
+
+        if not self.game.game_over:
+            self.timer_id = self.root.after(1000, self.update_timer)
 
     def update_status(self):
         """Обновление состояния игры."""
@@ -345,6 +670,13 @@ class TicTacToeApp:
         else:
             current = "X" if self.game.current_player == 1 else "O"
             self.status_var.set(f"{current} - ход")
+
+    def logout(self):
+        self.player_name_var.set("Гость")
+        LoginWindow(self.root, self.on_login)
+
+    def on_login(self, username):
+        self.player_name_var.set(username)
 
     def run(self):
         self.root.mainloop()
