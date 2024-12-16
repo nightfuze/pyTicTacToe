@@ -175,7 +175,6 @@ class TicTacToe:
             return self.evaluate_position(), None
 
         valid_moves = self.get_valid_moves()
-        print(len(valid_moves))
         if not valid_moves:
             return 0, None
 
@@ -630,7 +629,6 @@ class TicTacToeApp:
 
     def change_mode(self, event):
         """Обработчик изменения режима игры."""
-        print(self.mode_var.get())
         self.game_mode = ModeState(self.mode_var.get())
         self.reset_game()
 
