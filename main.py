@@ -286,6 +286,12 @@ class AuthWindow(tk.Toplevel):
         self.grab_set()
         self.focus_set()
         self.transient(root)
+        w, h = 300, 400
+        ws = root.winfo_screenwidth()
+        hs = root.winfo_screenheight()
+        x = (ws / 2) - (w / 2)
+        y = (hs / 2) - (h / 2)
+        self.geometry('%dx%d+%d+%d' % (w, h, x, y))
 
         self.auth_service = AuthService()
 
@@ -329,7 +335,6 @@ class LoginWindow(AuthWindow):
     def __init__(self, root, on_success=None):
         super().__init__(root)
         self.title("Авторизация")
-        self.geometry("300x300")
 
         self.create_field("Имя пользователя:", "username")
         self.create_field("Пароль:", "password")
@@ -348,10 +353,10 @@ class LoginWindow(AuthWindow):
         buttons_frame = tk.Frame(self.main_frame)
         buttons_frame.pack(pady=20)
 
-        self.login_button = tk.Button(buttons_frame, text="Войти", command=self.login)
+        self.login_button = ttk.Button(buttons_frame, text="Войти", command=self.login)
         self.login_button.pack(side=tk.LEFT, padx=5)
 
-        self.register_button = tk.Button(buttons_frame, text="Регистрация",
+        self.register_button = ttk.Button(buttons_frame, text="Регистрация",
                                          command=self.show_register)
         self.register_button.pack(side=tk.LEFT, padx=5)
 
@@ -417,10 +422,10 @@ class RegisterWindow(AuthWindow):
         buttons_frame = tk.Frame(self.main_frame)
         buttons_frame.pack(pady=20)
 
-        self.register_button = tk.Button(buttons_frame, text="Зарегистрироваться", command=self.register_user)
-        self.register_button.pack(padx=5)
+        self.register_button = ttk.Button(buttons_frame, text="Зарегистрироваться", command=self.register_user)
+        self.register_button.pack(padx=5, pady=5)
 
-        self.back_button = tk.Button(buttons_frame, text="Назад", command=self.back_to_login)
+        self.back_button = ttk.Button(buttons_frame, text="Назад", command=self.back_to_login)
         self.back_button.pack(padx=5)
 
     def toggle_password_visibility(self, show_password):
@@ -511,7 +516,7 @@ class TicTacToeApp:
         control_frame = tk.LabelFrame(self.sidebar_frame, text="Управление", padx=10, pady=5)
         control_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.reset_button = tk.Button(control_frame, text="Новая игра", command=self.reset_game)
+        self.reset_button = ttk.Button(control_frame, text="Новая игра", command=self.reset_game)
         self.reset_button.pack(fill=tk.X, pady=5)
 
         stats_frame = tk.LabelFrame(self.sidebar_frame, text="Статистика", padx=10, pady=5)
@@ -536,7 +541,7 @@ class TicTacToeApp:
         self.player_label = tk.Label(player_frame, textvariable=self.player_name_var)
         self.player_label.pack(anchor=tk.W, pady=5)
 
-        self.logout_button = tk.Button(player_frame, text="Выйти", command=self.logout)
+        self.logout_button = ttk.Button(player_frame, text="Выйти", command=self.logout)
         self.logout_button.pack(fill=tk.X, pady=5)
 
         canvas_size = self.cell_size * self.game.size
@@ -550,6 +555,8 @@ class TicTacToeApp:
         self.canvas.bind("<Button-1>", self.on_click)
 
         self.draw_board()
+
+        self.root.eval('tk::PlaceWindow . center')
 
         LoginWindow(self.root, self.on_login)
 
