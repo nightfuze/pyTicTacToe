@@ -1,0 +1,6 @@
+/.venv/
+/.idea/
+/users.json
+/main.spec
+/dist/
+/build/
